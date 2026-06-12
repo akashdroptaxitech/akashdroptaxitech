@@ -1,27 +1,33 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+ import { Inter, Outfit, Playfair_Display } from "next/font/google";
 import "./globals.css";
 import { GoogleAnalytics } from "@/components/GoogleAnalytics";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const outfit = Outfit({
+  variable: "--font-outfit",
   subsets: ["latin"],
 });
 
-const siteName = "Akash DropTaxi Tech – Tamil Nadu Intercity Cabs";
+const playfair = Playfair_Display({
+  variable: "--font-playfair",
+  subsets: ["latin"],
+  weight: ["600", "700", "800"],
+});
+
+const siteName = "Akash Drop Taxi – Tamil Nadu Intercity Cabs";
 const siteUrl = "https://your-vercel-domain.vercel.app";
 const siteDescription =
-  "Akash DropTaxi Tech offers premium one-way and round-trip taxi service across Tamil Nadu, Andhra Pradesh, Karnataka and Kerala with clean AC cabs, professional drivers and transparent distance-based pricing.";
+  "Akash Drop Taxi offers one-way and round-trip intercity taxi service across Tamil Nadu, Andhra Pradesh, Karnataka and Kerala with clean AC cabs, professional drivers and transparent distance-based pricing.";
 
 export const metadata: Metadata = {
   title: {
     default: siteName,
-    template: "%s | Akash DropTaxi Tech",
+    template: "%s | Akash Drop Taxi",
   },
   description: siteDescription,
   metadataBase: new URL(siteUrl),
@@ -29,9 +35,10 @@ export const metadata: Metadata = {
     title: siteName,
     description: siteDescription,
     url: siteUrl,
-    siteName: "Akash DropTaxi Tech",
+    siteName: "Akash Drop Taxi",
     type: "website",
     locale: "en_IN",
+    images: [{ url: "/logo-car.png", width: 788, height: 310, alt: "Akash Drop Taxi" }],
   },
   twitter: {
     card: "summary_large_image",
@@ -43,6 +50,13 @@ export const metadata: Metadata = {
   },
 };
 
+export const viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#070606" },
+  ],
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -51,7 +65,7 @@ export default function RootLayout({
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "TaxiService",
-    name: "Akash DropTaxi Tech",
+    name: "Akash Drop Taxi",
     url: siteUrl,
     areaServed: [
       "Tamil Nadu",
@@ -72,7 +86,7 @@ export default function RootLayout({
         />
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${inter.variable} ${outfit.variable} ${playfair.variable} min-h-dvh bg-white antialiased`}
       >
         <GoogleAnalytics
           measurementId={process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID ?? ""}

@@ -4,6 +4,15 @@ const PRICE_PER_KM = 13;
 
 type TripType = "one_way" | "round_trip";
 
+const TRIP_LABELS: Record<TripType, string> = {
+  one_way: "One Way",
+  round_trip: "Round Trip",
+};
+
+function isTripType(value: string): value is TripType {
+  return value === "one_way" || value === "round_trip";
+}
+
 interface BookingRequestBody {
   name: string;
   phone: string;
@@ -11,6 +20,8 @@ interface BookingRequestBody {
   drop: string;
   travelDate: string;
   tripType: TripType;
+  pickupTime?: string;
+  vehicle?: string;
 }
 
 async function getDistanceInKm(origin: string, destination: string) {
@@ -61,10 +72,12 @@ async function notifyDriver(body: BookingRequestBody, distanceKm: number, price:
     "",
     `Name: ${body.name}`,
     `Phone: ${body.phone}`,
-    `Trip type: ${body.tripType === "one_way" ? "One Way" : "Two Way / Round Trip"}`,
+    `Trip type: ${TRIP_LABELS[body.tripType]}`,
     `Pickup: ${body.pickup}`,
     `Drop: ${body.drop}`,
     `Travel Date: ${body.travelDate}`,
+    ...(body.pickupTime ? [`Pickup Time: ${body.pickupTime}`] : []),
+    ...(body.vehicle ? [`Vehicle: ${body.vehicle}`] : []),
     "",
     `Distance: ${distanceKm.toFixed(1)} km`,
     `Estimated Fare: ₹${Math.round(price).toLocaleString("en-IN")}`,
@@ -104,6 +117,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    if (!isTripType(body.tripType)) {
+      return NextResponse.json(
+        { error: "Invalid trip type. Choose One Way or Round Trip." },
+        { status: 400 },
+      );
+    }
+
     const distanceKm = await getDistanceInKm(body.pickup, body.drop);
 
     const multiplier = body.tripType === "round_trip" ? 2 : 1;
@@ -118,6 +138,8 @@ export async function POST(req: NextRequest) {
       distanceKm,
       estimatedPrice: Math.round(price),
       pricePerKm: PRICE_PER_KM,
+      tripType: body.tripType,
+      tripLabel: TRIP_LABELS[body.tripType],
     });
   } catch (error: unknown) {
     console.error("Booking error", error);

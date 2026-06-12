@@ -57,7 +57,7 @@ Open `http://localhost:3000` in your browser.
 
 ### How Booking Works
 
-1. User fills in **name, mobile**, **pickup**, **drop**, **travel date**, and selects **one-way** or **two-way / round trip**.
+1. User fills in **name, mobile**, **pickup**, **drop**, **travel date**, and selects **one-way** or **round trip**.
 2. Frontend calls the backend **`POST /api/book`** API.
 3. Backend uses **Google Maps Distance Matrix API** to calculate distance between pickup and drop locations.
 4. Fare is estimated as:
