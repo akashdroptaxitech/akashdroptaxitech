@@ -41,11 +41,32 @@ cp .env.example .env.local
 
 Update it with:
 
+- `MAP_PROVIDER` – `openstreet` (free default) or `google`.
 - `GOOGLE_MAPS_API_KEY` – Distance Matrix API key (with billing enabled).
+- Booking email settings are hardcoded in `src/lib/booking-notifications.ts`.
 - `TELEGRAM_BOT_TOKEN` – bot token from BotFather.
 - `TELEGRAM_CHAT_ID` – chat ID of the driver / group that should receive booking alerts.
 
-3. **Run the dev server**
+### Map Provider Switch
+
+You can switch map/search providers without code changes:
+
+- `MAP_PROVIDER=openstreet` → Uses Photon + OSRM (free, no API key required).
+- `MAP_PROVIDER=google` → Uses Places API (New) + Distance Matrix API (`GOOGLE_MAPS_API_KEY` required).
+
+Recommended for free usage:
+
+```env
+MAP_PROVIDER=openstreet
+```
+
+### Free Booking Email Setup
+
+1. Sign up at [resend.com](https://resend.com) (free: 3,000 emails/month).
+2. Create an API key and paste it into `RESEND_API_KEY` in `src/lib/booking-notifications.ts`.
+3. Booking alerts are sent to `abisheks@3roses.tech` from `onboarding@resend.dev`.
+
+### Run the dev server
 
 ```bash
 npm run dev

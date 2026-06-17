@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
+import { LocationAutocomplete } from "@/components/LocationAutocomplete";
 
 type TripType = "one_way" | "round_trip";
 
@@ -160,6 +161,12 @@ interface BookingResponse {
   error?: string;
 }
 
+interface FareEstimate {
+  distanceKm: number;
+  estimatedPrice: number;
+  pricePerKm: number;
+}
+
 function IconPhone({ className = "h-5 w-5" }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -284,6 +291,8 @@ export default function Home() {
   const [phone, setPhone] = useState("");
   const [pickup, setPickup] = useState("");
   const [drop, setDrop] = useState("");
+  const [pickupPlaceId, setPickupPlaceId] = useState<string | null>(null);
+  const [dropPlaceId, setDropPlaceId] = useState<string | null>(null);
   const [travelDate, setTravelDate] = useState("");
   const [pickupTime, setPickupTime] = useState("09:00 AM");
   const [vehicle, setVehicle] = useState("sedan");
@@ -291,6 +300,60 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<BookingResponse | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [estimate, setEstimate] = useState<FareEstimate | null>(null);
+  const [estimateLoading, setEstimateLoading] = useState(false);
+  const [estimateError, setEstimateError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!pickupPlaceId || !dropPlaceId) {
+      setEstimate(null);
+      setEstimateError(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      setEstimateLoading(true);
+      setEstimateError(null);
+
+      try {
+        const params = new URLSearchParams({
+          pickup: pickup.trim(),
+          drop: drop.trim(),
+          tripType,
+          vehicle,
+        });
+        const res = await fetch(`/api/estimate?${params.toString()}`, {
+          signal: controller.signal,
+        });
+        const data = (await res.json()) as FareEstimate & { error?: string };
+
+        if (!res.ok) {
+          setEstimate(null);
+          setEstimateError(data.error || "Could not calculate fare.");
+          return;
+        }
+
+        setEstimate({
+          distanceKm: data.distanceKm,
+          estimatedPrice: data.estimatedPrice,
+          pricePerKm: data.pricePerKm,
+        });
+      } catch (error) {
+        if ((error as Error).name !== "AbortError") {
+          setEstimate(null);
+          setEstimateError("Could not calculate fare.");
+        }
+      } finally {
+        setEstimateLoading(false);
+      }
+    }, 400);
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [pickup, drop, pickupPlaceId, dropPlaceId, tripType, vehicle]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -526,29 +589,71 @@ export default function Home() {
                   </div>
                 </div>
 
-                <div>
-                  <label className="mb-1 block text-xs font-semibold text-gray-600">Pickup Location</label>
-                  <input
-                    type="text"
-                    value={pickup}
-                    onChange={(e) => setPickup(e.target.value)}
-                    className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3.5 py-2.5 text-sm outline-none transition focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20"
-                    placeholder="Eg. Chennai Airport, T Nagar"
-                    required
-                  />
-                </div>
+                <LocationAutocomplete
+                  label="Pickup Location"
+                  value={pickup}
+                  onChange={(value) => {
+                    setPickup(value);
+                    setPickupPlaceId(null);
+                  }}
+                  onSelect={(suggestion) => setPickupPlaceId(suggestion.placeId)}
+                  placeholder="Eg. Chennai Airport, T Nagar"
+                  required
+                />
 
-                <div>
-                  <label className="mb-1 block text-xs font-semibold text-gray-600">Drop Location</label>
-                  <input
-                    type="text"
-                    value={drop}
-                    onChange={(e) => setDrop(e.target.value)}
-                    className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3.5 py-2.5 text-sm outline-none transition focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20"
-                    placeholder="Eg. Bangalore, Madurai"
-                    required
-                  />
-                </div>
+                <LocationAutocomplete
+                  label="Drop Location"
+                  value={drop}
+                  onChange={(value) => {
+                    setDrop(value);
+                    setDropPlaceId(null);
+                  }}
+                  onSelect={(suggestion) => setDropPlaceId(suggestion.placeId)}
+                  placeholder="Eg. Bangalore, Madurai"
+                  required
+                />
+
+                {((pickup || drop) && (!pickupPlaceId || !dropPlaceId)) && (
+                  <p className="text-xs text-gray-500">
+                    Select pickup and drop from the suggestions to see distance and fare.
+                  </p>
+                )}
+
+                {(estimateLoading || estimate || estimateError) && (
+                  <div
+                    className={`rounded-xl border px-4 py-3 text-sm ${
+                      estimateError
+                        ? "border-red-200 bg-red-50 text-red-700"
+                        : "border-amber-200 bg-amber-50 text-amber-950"
+                    }`}
+                  >
+                    {estimateLoading && (
+                      <p className="text-gray-600">Calculating distance and fare...</p>
+                    )}
+                    {!estimateLoading && estimateError && (
+                      <p>{estimateError}</p>
+                    )}
+                    {!estimateLoading && estimate && (
+                      <>
+                        <p className="text-xs font-bold uppercase tracking-wider text-amber-600">
+                          Instant Fare Estimate
+                        </p>
+                        <p className="mt-1 text-2xl font-extrabold text-amber-700">
+                          ₹{estimate.estimatedPrice.toLocaleString("en-IN")}
+                        </p>
+                        <p className="mt-1 text-gray-600">
+                          Distance: <strong>{estimate.distanceKm.toFixed(1)} km</strong>
+                          {" · "}
+                          ₹{estimate.pricePerKm}/km
+                          {tripType === "round_trip" && " · Round trip (both ways)"}
+                        </p>
+                        <p className="mt-1.5 text-xs text-gray-500">
+                          Toll, permit and parking charges extra.
+                        </p>
+                      </>
+                    )}
+                  </div>
+                )}
 
                 <div className="grid gap-3.5 sm:grid-cols-2">
                   <div>

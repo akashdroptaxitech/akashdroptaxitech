@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-
-const PRICE_PER_KM = 13;
-
-type TripType = "one_way" | "round_trip";
+import { notifyEmail, notifyTelegram } from "@/lib/booking-notifications";
+import { getDistanceInKm as getGoogleDistanceInKm } from "@/lib/google-maps";
+import { getDistanceInKm as getOsmDistanceInKm } from "@/lib/osm";
+import { calculateFare, getPricePerKm, type TripType } from "@/lib/pricing";
 
 const TRIP_LABELS: Record<TripType, string> = {
   one_way: "One Way",
@@ -11,6 +11,10 @@ const TRIP_LABELS: Record<TripType, string> = {
 
 function isTripType(value: string): value is TripType {
   return value === "one_way" || value === "round_trip";
+}
+
+function getMapProvider() {
+  return process.env.MAP_PROVIDER === "google" ? "google" : "openstreet";
 }
 
 interface BookingRequestBody {
@@ -22,81 +26,6 @@ interface BookingRequestBody {
   tripType: TripType;
   pickupTime?: string;
   vehicle?: string;
-}
-
-async function getDistanceInKm(origin: string, destination: string) {
-  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
-  if (!apiKey) {
-    throw new Error("Missing GOOGLE_MAPS_API_KEY");
-  }
-
-  const params = new URLSearchParams({
-    origins: origin,
-    destinations: destination,
-    key: apiKey,
-  });
-
-  const res = await fetch(
-    `https://maps.googleapis.com/maps/api/distancematrix/json?${params.toString()}`,
-  );
-
-  if (!res.ok) {
-    throw new Error("Failed to fetch distance from Google Maps");
-  }
-
-  const data = await res.json();
-
-  const element =
-    data.rows?.[0]?.elements?.[0] && data.rows[0].elements[0].status === "OK"
-      ? data.rows[0].elements[0]
-      : null;
-
-  if (!element || !element.distance) {
-    throw new Error("Could not calculate distance for given locations");
-  }
-
-  const meters = element.distance.value as number;
-  return meters / 1000;
-}
-
-async function notifyDriver(body: BookingRequestBody, distanceKm: number, price: number) {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
-  const chatId = process.env.TELEGRAM_CHAT_ID;
-  if (!token || !chatId) {
-    // Silently skip if not configured; app should still work.
-    return;
-  }
-
-  const messageLines = [
-    "🚖 New Taxi Booking",
-    "",
-    `Name: ${body.name}`,
-    `Phone: ${body.phone}`,
-    `Trip type: ${TRIP_LABELS[body.tripType]}`,
-    `Pickup: ${body.pickup}`,
-    `Drop: ${body.drop}`,
-    `Travel Date: ${body.travelDate}`,
-    ...(body.pickupTime ? [`Pickup Time: ${body.pickupTime}`] : []),
-    ...(body.vehicle ? [`Vehicle: ${body.vehicle}`] : []),
-    "",
-    `Distance: ${distanceKm.toFixed(1)} km`,
-    `Estimated Fare: ₹${Math.round(price).toLocaleString("en-IN")}`,
-  ];
-
-  const text = messageLines.join("\n");
-
-  const telegramUrl = `https://api.telegram.org/bot${token}/sendMessage`;
-  await fetch(telegramUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      chat_id: chatId,
-      text,
-      parse_mode: "Markdown",
-    }),
-  });
 }
 
 export async function POST(req: NextRequest) {
@@ -124,29 +53,40 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const provider = getMapProvider();
+    if (provider === "google" && !process.env.GOOGLE_MAPS_API_KEY) {
+      return NextResponse.json(
+        { error: "Add GOOGLE_MAPS_API_KEY to .env.local" },
+        { status: 503 },
+      );
+    }
+
+    const getDistanceInKm = provider === "google" ? getGoogleDistanceInKm : getOsmDistanceInKm;
     const distanceKm = await getDistanceInKm(body.pickup, body.drop);
+    const vehicle = body.vehicle ?? "sedan";
+    const price = calculateFare(distanceKm, body.tripType, vehicle);
+    const pricePerKm = getPricePerKm(body.tripType, vehicle);
 
-    const multiplier = body.tripType === "round_trip" ? 2 : 1;
-    const price = distanceKm * PRICE_PER_KM * multiplier;
-
-    await notifyDriver(body, distanceKm, price).catch(() => {
-      // Ignore notification errors
+    await Promise.all([
+      notifyTelegram(body, distanceKm, price),
+      notifyEmail(body, distanceKm, price),
+    ]).catch((error) => {
+      console.error("Notification error", error);
     });
 
     return NextResponse.json({
       success: true,
       distanceKm,
       estimatedPrice: Math.round(price),
-      pricePerKm: PRICE_PER_KM,
+      pricePerKm,
       tripType: body.tripType,
       tripLabel: TRIP_LABELS[body.tripType],
     });
   } catch (error: unknown) {
     console.error("Booking error", error);
     return NextResponse.json(
-      { error: "Unable to process booking at the moment." },
+      { error: "Unable to process booking. Pick locations from the suggestions." },
       { status: 500 },
     );
   }
 }
-
